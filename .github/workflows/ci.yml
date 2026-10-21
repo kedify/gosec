@@ -63,7 +63,22 @@ jobs:
             ${{ runner.os }}-go-
       - name: Create Test Coverage
         run: make test-coverage
+      - name: Save Test Coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage
+          path: coverage.out
+          if-no-files-found: error
+      - name: Check Codecov configuration
+        id: codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -n "$CODECOV_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload Test Coverage
+        if: steps.codecov.outputs.configured == 'true'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
