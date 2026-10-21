@@ -189,7 +189,6 @@ type Analyzer struct {
 	trackSuppressions bool
 	concurrency       int
 	analyzerSet       *analyzers.AnalyzerSet
-	mu                sync.Mutex
 }
 
 // NewAnalyzer builds a new analyzer.
@@ -339,9 +338,7 @@ func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.
 	// step 1/3 create build context.
 	buildD := build.Default
 	// step 2/3: add build tags to get env dependent files into basePackage.
-	gosec.mu.Lock()
 	buildD.BuildTags = conf.BuildFlags
-	gosec.mu.Unlock()
 	basePackage, err := buildD.ImportDir(pkgPath, build.ImportComment)
 	if err != nil {
 		return []*packages.Package{}, fmt.Errorf("importing dir %q: %w", pkgPath, err)
@@ -365,10 +362,11 @@ func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.
 	}
 
 	// step 3/3 remove build tags from conf to proceed build correctly.
-	gosec.mu.Lock()
-	conf.BuildFlags = nil
-	defer gosec.mu.Unlock()
-	pkgs, err := packages.Load(conf, packageFiles...)
+	// Keep the worker configuration immutable so package loading can run
+	// concurrently without sharing mutable BuildFlags.
+	loadConfig := *conf
+	loadConfig.BuildFlags = nil
+	pkgs, err := packages.Load(&loadConfig, packageFiles...)
 	if err != nil {
 		return []*packages.Package{}, fmt.Errorf("loading files from package %q: %w", pkgPath, err)
 	}

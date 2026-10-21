@@ -114,6 +114,26 @@ var _ = Describe("Analyzer", func() {
 			Expect(metrics.NumFiles).To(Equal(2))
 		})
 
+		It("should preserve build tags while loading multiple packages concurrently", func() {
+			customAnalyzer := gosec.NewAnalyzer(nil, false, false, false, 4, logger)
+			customAnalyzer.LoadRules(rules.Generate(false).RulesInfo())
+			var paths []string
+			for range 2 {
+				pkg := testutils.NewTestPackage()
+				defer pkg.Close()
+				pkg.AddFile("main.go", "package main\nfunc main() { println(tagged) }\n")
+				pkg.AddFile("tagged.go", "//go:build scan_tag\n\npackage main\nconst tagged = 1\n")
+				Expect(pkg.Build()).To(Succeed())
+				paths = append(paths, pkg.Path)
+			}
+
+			err := customAnalyzer.Process([]string{"scan_tag"}, paths...)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, metrics, errors := customAnalyzer.Report()
+			Expect(errors).To(BeEmpty())
+			Expect(metrics.NumFiles).To(Equal(4))
+		})
+
 		It("should be able to analyze multiple Go packages", func() {
 			analyzer.LoadRules(rules.Generate(false).RulesInfo())
 			pkg1 := testutils.NewTestPackage()

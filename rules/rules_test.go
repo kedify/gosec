@@ -217,5 +217,17 @@ var _ = Describe("gosec rules", func() {
 				runner("G601", testutils.SampleCodeG601)
 			}
 		})
+
+		It("should detect implicit aliasing for an explicitly selected pre-1.22 Go version", func() {
+			GinkgoT().Setenv("GOSECGOVERSION", "go1.21")
+			runner("G601", testutils.SampleCodeG601)
+		})
+
+		It("should skip implicit aliasing for an explicitly selected Go 1.22 version", func() {
+			GinkgoT().Setenv("GOSECGOVERSION", "go1.22")
+			sample := testutils.SampleCodeG601[0]
+			sample.Errors = 0
+			runner("G601", []testutils.CodeSample{sample})
+		})
 	})
 })
