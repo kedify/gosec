@@ -35,6 +35,8 @@ import (
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/buildssa"
+	"golang.org/x/tools/go/analysis/passes/ctrlflow"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/packages"
 
 	"github.com/securego/gosec/v2/analyzers"
@@ -521,6 +523,20 @@ func (gosec *Analyzer) buildSSA(pkg *packages.Package) (interface{}, error) {
 		AllPackageFacts:   nil,
 	}
 
+	// buildssa now requires control-flow facts and the AST inspector. Run its
+	// prerequisites before invoking the SSA pass outside an analysis driver.
+	ssaPass.ResultOf = make(map[*analysis.Analyzer]interface{})
+	ssaPass.ImportObjectFact = func(types.Object, analysis.Fact) bool { return false }
+	ssaPass.ExportObjectFact = func(types.Object, analysis.Fact) {}
+	for _, prerequisite := range []*analysis.Analyzer{inspect.Analyzer, ctrlflow.Analyzer} {
+		ssaPass.Analyzer = prerequisite
+		result, err := prerequisite.Run(ssaPass)
+		if err != nil {
+			return nil, err
+		}
+		ssaPass.ResultOf[prerequisite] = result
+	}
+	ssaPass.Analyzer = buildssa.Analyzer
 	return ssaPass.Analyzer.Run(ssaPass)
 }
 
