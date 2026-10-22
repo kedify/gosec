@@ -11,10 +11,8 @@ jobs:
     strategy:
       matrix:
         version:
-          - go-version: "1.26.10"
-            golangci: "latest"
           - go-version: "1.27.3"
-            golangci: "latest"
+            golangci: "v2.15.0"
     runs-on: ubuntu-latest
     env:
       GO111MODULE: on
