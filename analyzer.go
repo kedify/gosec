@@ -35,6 +35,8 @@ import (
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/buildssa"
+	"golang.org/x/tools/go/analysis/passes/ctrlflow"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/packages"
 
 	"github.com/securego/gosec/v2/analyzers"
@@ -187,7 +189,6 @@ type Analyzer struct {
 	trackSuppressions bool
 	concurrency       int
 	analyzerSet       *analyzers.AnalyzerSet
-	mu                sync.Mutex
 }
 
 // NewAnalyzer builds a new analyzer.
@@ -337,9 +338,7 @@ func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.
 	// step 1/3 create build context.
 	buildD := build.Default
 	// step 2/3: add build tags to get env dependent files into basePackage.
-	gosec.mu.Lock()
 	buildD.BuildTags = conf.BuildFlags
-	gosec.mu.Unlock()
 	basePackage, err := buildD.ImportDir(pkgPath, build.ImportComment)
 	if err != nil {
 		return []*packages.Package{}, fmt.Errorf("importing dir %q: %w", pkgPath, err)
@@ -363,10 +362,11 @@ func (gosec *Analyzer) load(pkgPath string, conf *packages.Config) ([]*packages.
 	}
 
 	// step 3/3 remove build tags from conf to proceed build correctly.
-	gosec.mu.Lock()
-	conf.BuildFlags = nil
-	defer gosec.mu.Unlock()
-	pkgs, err := packages.Load(conf, packageFiles...)
+	// Keep the worker configuration immutable so package loading can run
+	// concurrently without sharing mutable BuildFlags.
+	loadConfig := *conf
+	loadConfig.BuildFlags = nil
+	pkgs, err := packages.Load(&loadConfig, packageFiles...)
 	if err != nil {
 		return []*packages.Package{}, fmt.Errorf("loading files from package %q: %w", pkgPath, err)
 	}
@@ -521,6 +521,20 @@ func (gosec *Analyzer) buildSSA(pkg *packages.Package) (interface{}, error) {
 		AllPackageFacts:   nil,
 	}
 
+	// buildssa now requires control-flow facts and the AST inspector. Run its
+	// prerequisites before invoking the SSA pass outside an analysis driver.
+	ssaPass.ResultOf = make(map[*analysis.Analyzer]interface{})
+	ssaPass.ImportObjectFact = func(types.Object, analysis.Fact) bool { return false }
+	ssaPass.ExportObjectFact = func(types.Object, analysis.Fact) {}
+	for _, prerequisite := range []*analysis.Analyzer{inspect.Analyzer, ctrlflow.Analyzer} {
+		ssaPass.Analyzer = prerequisite
+		result, err := prerequisite.Run(ssaPass)
+		if err != nil {
+			return nil, err
+		}
+		ssaPass.ResultOf[prerequisite] = result
+	}
+	ssaPass.Analyzer = buildssa.Analyzer
 	return ssaPass.Analyzer.Run(ssaPass)
 }
 

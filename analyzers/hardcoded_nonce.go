@@ -81,7 +81,7 @@ func raiseIssue(val ssa.Value, funcsToTrack map[string][]int, ssaFuncs []*ssa.Fu
 	var err error
 	var allIssues []*issue.Issue
 	var issues []*issue.Issue
-	switch valType := (val).(type) {
+	switch valType := val.(type) {
 	case *ssa.Slice:
 		issueDescription += " by passing hardcoded slice/array"
 		issues, err = iterateThroughReferrers(val, funcsToTrack, pass.Analyzer.Name, issueDescription, pass.Fset, issue.High)
@@ -228,7 +228,7 @@ func getArgsFromTrackedFunctions(ssaFuncs []*ssa.Function, trackedFunc map[strin
 }
 
 func iterateTrackedFunctionsAndAddArgs(funcBlocInstr ssa.Instruction, trackedFunc map[string][]int, values map[string]*ssa.Value) {
-	if funcCall, ok := (funcBlocInstr).(*ssa.Call); ok {
+	if funcCall, ok := funcBlocInstr.(*ssa.Call); ok {
 		for trackedFuncName, trackedFuncArgsInfo := range trackedFunc {
 			// only process functions that have the same number of arguments as the ones we track
 			if len(funcCall.Call.Args) == trackedFuncArgsInfo[0] {

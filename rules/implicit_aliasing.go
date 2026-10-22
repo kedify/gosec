@@ -14,6 +14,7 @@ type implicitAliasing struct {
 	aliases         map[*ast.Object]struct{}
 	rightBrace      token.Pos
 	acceptableAlias []*ast.UnaryExpr
+	go122OrLater    bool
 }
 
 func (r *implicitAliasing) ID() string {
@@ -48,8 +49,7 @@ func doGetIdentExpr(expr ast.Expr, hasSelector bool) (*ast.Ident, bool) {
 
 func (r *implicitAliasing) Match(n ast.Node, c *gosec.Context) (*issue.Issue, error) {
 	// This rule does not apply for Go 1.22, see https://go.dev/doc/go1.22#language.
-	major, minor, _ := gosec.GoVersion()
-	if major >= 1 && minor >= 22 {
+	if r.go122OrLater {
 		return nil, nil
 	}
 
@@ -119,7 +119,11 @@ func (r *implicitAliasing) Match(n ast.Node, c *gosec.Context) (*issue.Issue, er
 
 // NewImplicitAliasing detects implicit memory aliasing of type: for blah := SomeCall() {... SomeOtherCall(&blah) ...}
 func NewImplicitAliasing(id string, _ gosec.Config) (gosec.Rule, []ast.Node) {
+	// Resolve the version once per rule, rather than spawning go list for
+	// every matching AST node in the scan.
+	major, minor, _ := gosec.GoVersion()
 	return &implicitAliasing{
+		go122OrLater:    major >= 1 && minor >= 22,
 		aliases:         make(map[*ast.Object]struct{}),
 		rightBrace:      token.NoPos,
 		acceptableAlias: make([]*ast.UnaryExpr, 0),
