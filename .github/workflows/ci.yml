@@ -34,9 +34,7 @@ jobs:
         with:
           version: ${{ matrix.version.golangci }}
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: ./...
+        run: go run ./cmd/gosec ./...
       - name: Run Tests
         run: make test
       - name: Perf Diff
