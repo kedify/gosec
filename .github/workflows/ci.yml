@@ -38,7 +38,11 @@ jobs:
       - name: Run Tests
         run: make test
       - name: Perf Diff
-        run: make perf-diff
+        env:
+          GOSEC_PERF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$GOSEC_PERF_BASE"
+          make perf-diff
   coverage:
     needs: [test]
     runs-on: ubuntu-latest
