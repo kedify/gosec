@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.27.3
+ARG GO_VERSION=1.27.4
 FROM mirror.gcr.io/library/golang:${GO_VERSION}-alpine AS builder
 RUN apk add --no-cache ca-certificates make git curl gcc libc-dev \
     && mkdir -p /build
