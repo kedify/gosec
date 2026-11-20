@@ -67,7 +67,7 @@ jobs:
           tags: ${{steps.meta.outputs.tags}}
           labels: ${{steps.meta.outputs.labels}}
           push: true
-          build-args: GO_VERSION=1.27.3
+          build-args: GO_VERSION=1.27.4
       - name: Sign Docker Image
         run: cosign sign --yes --key /tmp/cosign.key "docker.io/securego/gosec@${DIGEST}"
         env:

@@ -1,41 +1,53 @@
 #!/bin/bash
 
-BIN="gosec"
-BUILD_DIR="/tmp/securego"
+set -euo pipefail
+
+base_ref=${GOSEC_PERF_BASE:-origin/master}
+base_commit=$(git rev-parse --verify --end-of-options "$base_ref^{commit}")
+build_dir=$(mktemp -d)
+reference_dir="$build_dir/reference"
+trap 'git worktree remove --force "$reference_dir" 2>/dev/null || true; rm -rf -- "$build_dir"' EXIT
+git worktree add --detach "$reference_dir" "$base_commit" >/dev/null
+
+clock=date
+if command -v gdate >/dev/null; then
+  clock=gdate
+fi
 
 # Scan the current folder and measure the duration.
-function scan() {
-  local scan_cmd=$1
-  s=$(date +%s%3N)
-  $scan_cmd -quiet ./...
-  e=$(date +%s%3N)
-  res=$(expr $e - $s)
-  echo $res
+scan() {
+  local start end
+  start=$("$clock" +%s%3N)
+  "$1" -quiet ./... >/dev/null || return
+  end=$("$clock" +%s%3N)
+  printf '%s\n' "$((end - start))"
 }
 
-# Build the master reference version.
-mkdir -p ${BUILD_DIR}
-git clone --quiet https://github.com/securego/gosec.git ${BUILD_DIR} >/dev/null
-make -C ${BUILD_DIR} >/dev/null
+# Build both versions before measuring so they use the same toolchain and input.
+make -C "$reference_dir" build >/dev/null
+make build >/dev/null
 
-# Scan once with the main reference.
-duration_master=$(scan "${BUILD_DIR}/${BIN}")
+# Warm both binaries, then compare median timings from interleaved scans.
+scan "$reference_dir/gosec" >/dev/null
+scan ./gosec >/dev/null
+reference_times=()
+current_times=()
+for attempt in 1 2 3; do
+  reference_times+=("$(scan "$reference_dir/gosec")")
+  current_times+=("$(scan ./gosec)")
+done
+duration_master=$(printf '%s\n' "${reference_times[@]}" | sort -n | sed -n '2p')
+duration=$(printf '%s\n' "${current_times[@]}" | sort -n | sed -n '2p')
 echo "gosec reference time: ${duration_master}ms"
-
-# Build the current version.
-make -C . >/dev/null
-
-# Scan once with the current version.
-duration=$(scan "./${BIN}")
 echo "gosec time: ${duration}ms"
 
 # Compute the difference of the execution time.
-diff=$(($duration - $duration_master))
+diff=$((duration - duration_master))
 if [[ diff -lt 0 ]]; then
-  diff=$(($diff * -1))
+  diff=$((-diff))
 fi
 echo "diff: ${diff}ms"
-perf=$((100 - ($duration * 100) / $duration_master))
+perf=$((100 - (duration * 100) / duration_master))
 echo "perf diff: ${perf}%"
 
 # Fail the build if there is a performance degradation of more than 10%.

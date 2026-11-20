@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         version:
-          - go-version: "1.27.3"
+          - go-version: "1.27.4"
             golangci: "v2.15.0"
     runs-on: ubuntu-latest
     env:
@@ -38,7 +38,11 @@ jobs:
       - name: Run Tests
         run: make test
       - name: Perf Diff
-        run: make perf-diff
+        env:
+          GOSEC_PERF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$GOSEC_PERF_BASE"
+          make perf-diff
   coverage:
     needs: [test]
     runs-on: ubuntu-latest
@@ -48,7 +52,7 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
       - name: Checkout Source
         uses: actions/checkout@v5
       - uses: actions/cache@v4
